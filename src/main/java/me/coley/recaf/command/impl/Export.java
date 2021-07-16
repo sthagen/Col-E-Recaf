@@ -125,17 +125,19 @@ public class Export extends ControllerCommand implements Callable<Void> {
 	 */
 	public static void writeArchive(File output, Map<String, byte[]> content) throws IOException {
 		String extension = IOUtil.getExtension(output.toPath());
-		FileOutputStream fos = new FileOutputStream(output);
-		try (ZipOutputStream jos = ("zip".equals(extension)) ? new ZipOutputStream(fos) :
-				/* Let's assume it's a jar */ new JarOutputStream(fos)) {
+		// Use buffered streams
+		// See https://github.com/Col-E/Recaf/issues/391
+		OutputStream os = new BufferedOutputStream(Files.newOutputStream(output.toPath()), 1048576);
+		try (ZipOutputStream jos = ("zip".equals(extension)) ? new ZipOutputStream(os) :
+				/* Let's assume it's a jar */ new JarOutputStream(os)) {
+			PluginsManager pluginsManager = PluginsManager.getInstance();
 			Set<String> dirsVisited = new HashSet<>();
 			// Contents is iterated in sorted order (because 'archiveContent' is TreeMap).
 			// This allows us to insert directory entries before file entries of that directory occur.
 			for (Map.Entry<String, byte[]> entry : content.entrySet()) {
 				String key = entry.getKey();
 				byte[] out = entry.getValue();
-				for (ExportInterceptorPlugin interceptor : PluginsManager.getInstance()
-						.ofType(ExportInterceptorPlugin.class)) {
+				for (ExportInterceptorPlugin interceptor : pluginsManager.ofType(ExportInterceptorPlugin.class)) {
 					out = interceptor.intercept(key, out);
 				}
 				// Write directories for upcoming entries if necessary

@@ -31,7 +31,7 @@ import static me.coley.recaf.util.Log.*;
  * @author Matt
  */
 public class Recaf {
-	public static final String VERSION = "2.19.5";
+	public static final String VERSION = "2.20.2";
 	public static final String DOC_URL = "https://col-e.github.io/Recaf-documentation/";
 	public static final int ASM_VERSION = Opcodes.ASM9;
 	private static Controller currentController;
@@ -204,5 +204,10 @@ public class Recaf {
 	 */
 	public static Path getDirectory(String subfolder) {
 		return getDirectory().resolve(subfolder);
+	}
+
+	static {
+		// Early set title window for Mac OS users
+		System.setProperty("apple.awt.application.name", "Recaf");
 	}
 }

@@ -41,24 +41,29 @@ public class LoadWorkspace implements Callable<Workspace> {
 	public Workspace call() throws Exception {
 		status = LangUtil.translate("ui.load.resolve");
 		String name = input.getFileName().toString().toLowerCase();
-		String ext = IOUtil.getExtension(input);
 		// Handle symbolic links
 		int symLevel = 0;
 		if (ShortcutUtil.isPotentialValidLink(input)) {
 			input = Paths.get(new ShortcutUtil(input).getRealFilename());
 			name = input.getFileName().toString().toLowerCase();
-			ext = name.substring(name.lastIndexOf(".") + 1);
 		}
 		while (Files.isSymbolicLink(input) && symLevel < 5) {
 			input = Files.readSymbolicLink(input);
 			symLevel++;
 		}
-		JavaResource resource = null;
+		String ext;
+		if (Files.isDirectory(input)) {
+			ext = "dir";
+		} else {
+			ext = IOUtil.detectExtension(input);
+		}
+		JavaResource resource;
 		switch(ext) {
 			case "class":
 				status = LangUtil.translate("ui.load.initialize.resource");
 				resource = new ClassResource(input);
 				break;
+			case "zip":
 			case "jar":
 				status = LangUtil.translate("ui.load.initialize.resource");
 				resource = new JarResource(input);
@@ -66,6 +71,10 @@ public class LoadWorkspace implements Callable<Workspace> {
 			case "war":
 				status = LangUtil.translate("ui.load.initialize.resource");
 				resource = new WarResource(input);
+				break;
+			case "dir":
+				status = LangUtil.translate("ui.load.initialize.resource");
+				resource = new DirectoryResource(input);
 				break;
 			case "json":
 				status = LangUtil.translate("ui.load.initialize.workspace");
