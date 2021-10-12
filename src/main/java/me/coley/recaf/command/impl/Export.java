@@ -4,12 +4,18 @@ import me.coley.recaf.command.ControllerCommand;
 import me.coley.recaf.plugin.PluginsManager;
 import me.coley.recaf.plugin.api.ExportInterceptorPlugin;
 import me.coley.recaf.util.IOUtil;
-import me.coley.recaf.workspace.*;
+import me.coley.recaf.workspace.ClassResource;
+import me.coley.recaf.workspace.DirectoryResource;
+import me.coley.recaf.workspace.JavaResource;
+import me.coley.recaf.workspace.WarResource;
 import org.apache.commons.io.FileUtils;
 import org.objectweb.asm.ClassReader;
 import picocli.CommandLine;
 
-import java.io.*;
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -18,10 +24,12 @@ import java.util.concurrent.Callable;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 import java.util.stream.Collectors;
+import java.util.zip.CRC32;
+import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import static me.coley.recaf.util.CollectionUtil.copySet;
-import static me.coley.recaf.util.Log.*;
+import static me.coley.recaf.util.Log.info;
 
 /**
  * Command for outputting workspace resources.
@@ -34,6 +42,8 @@ public class Export extends ControllerCommand implements Callable<Void> {
 	public File output;
 	@CommandLine.Option(names = { "--shadelibs" }, description = "Add library files to export.")
 	public boolean shadeLibs;
+	@CommandLine.Option(names = { "--compression" }, description = "Enable compression.")
+	public boolean compress = true;
 
 	/**
 	 * @return n/a
@@ -81,7 +91,7 @@ public class Export extends ControllerCommand implements Callable<Void> {
 		if (output.isDirectory() && primary instanceof DirectoryResource)
 			writeDirectory(output, outContent);
 		else
-			writeArchive(output, outContent);
+			writeArchive(compress, output, outContent);
 		info("Saved to {}.\n - Modified classes: {}\n - Modified resources: {}",
 				output.getName(), modifiedClasses.size(), modifiedResources.size());
 		return null;
@@ -115,6 +125,8 @@ public class Export extends ControllerCommand implements Callable<Void> {
 	/**
 	 * Writes a map to an archive.
 	 *
+	 * @param compress
+	 * 		Enable zip compression.
 	 * @param output
 	 * 		File location of jar.
 	 * @param content
@@ -123,10 +135,9 @@ public class Export extends ControllerCommand implements Callable<Void> {
 	 * @throws IOException
 	 * 		When the jar file cannot be written to.
 	 */
-	public static void writeArchive(File output, Map<String, byte[]> content) throws IOException {
+	public static void writeArchive(boolean compress, File output, Map<String, byte[]> content) throws IOException {
 		String extension = IOUtil.getExtension(output.toPath());
-		// Use buffered streams
-		// See https://github.com/Col-E/Recaf/issues/391
+		// Use buffered streams, reduce overall file write operations
 		OutputStream os = new BufferedOutputStream(Files.newOutputStream(output.toPath()), 1048576);
 		try (ZipOutputStream jos = ("zip".equals(extension)) ? new ZipOutputStream(os) :
 				/* Let's assume it's a jar */ new JarOutputStream(os)) {
@@ -134,6 +145,7 @@ public class Export extends ControllerCommand implements Callable<Void> {
 			Set<String> dirsVisited = new HashSet<>();
 			// Contents is iterated in sorted order (because 'archiveContent' is TreeMap).
 			// This allows us to insert directory entries before file entries of that directory occur.
+			CRC32 crc = new CRC32();
 			for (Map.Entry<String, byte[]> entry : content.entrySet()) {
 				String key = entry.getKey();
 				byte[] out = entry.getValue();
@@ -159,7 +171,16 @@ public class Export extends ControllerCommand implements Callable<Void> {
 					}
 				}
 				// Write entry content
-				jos.putNextEntry(new JarEntry(key));
+				crc.reset();
+				crc.update(out, 0, out.length);
+				JarEntry outEntry = new JarEntry(key);
+				outEntry.setMethod(compress ? ZipEntry.DEFLATED : ZipEntry.STORED);
+				if (!compress) {
+					outEntry.setSize(out.length);
+					outEntry.setCompressedSize(out.length);
+				}
+				outEntry.setCrc(crc.getValue());
+				jos.putNextEntry(outEntry);
 				jos.write(out);
 				jos.closeEntry();
 			}
