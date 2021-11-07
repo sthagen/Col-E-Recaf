@@ -1,5 +1,6 @@
 package me.coley.recaf.compiler;
 
+import me.coley.recaf.util.ClassUtil;
 import me.coley.recaf.util.Log;
 import me.coley.recaf.util.VMUtil;
 import org.objectweb.asm.Opcodes;
@@ -12,7 +13,22 @@ import java.lang.reflect.Field;
  * @author Matt
  */
 public enum JavacTargetVersion {
-	V4("1.4"), V5("1.5"), V6("1.6"), V7("1.7"), V8("1.8"), V9("9"), V10("10"), V11("11"), V12("12"), V13("13");
+	V4("1.4"),
+	V5("1.5"),
+	V6("1.6"),
+	V7("1.7"),
+	V8("1.8"),
+	V9("9"),
+	V10("10"),
+	V11("11"),
+	V12("12"),
+	V13("13"),
+	V14("14"),
+	V15("15"),
+	V16("16"),
+	V17("17"),
+	V18("18"),
+	;
 
 	/**
 	 * Value to pass as a compiler argument.
@@ -58,6 +74,16 @@ public enum JavacTargetVersion {
 				return V12;
 			case Opcodes.V13:
 				return V13;
+			case Opcodes.V14:
+				return V14;
+			case Opcodes.V15:
+				return V15;
+			case Opcodes.V16:
+				return V16;
+			case Opcodes.V17:
+				return V17;
+			case Opcodes.V18:
+				return V18;
 			default:
 				return V8;
 		}
@@ -84,7 +110,7 @@ public enum JavacTargetVersion {
 	 */
 	public static JavacTargetVersion getMaxJavacSupport() {
 		try {
-			return fromClassMajor(VMUtil.getVmVersion());
+			return fromClassMajor(VMUtil.getVmVersion() + ClassUtil.VERSION_OFFSET);
 		} catch (Exception ex) {
 			Log.error("Failed to find javac maximum supported version, defaulting to Java 8 (52)");
 		}
