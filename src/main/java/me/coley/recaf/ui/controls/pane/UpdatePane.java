@@ -2,6 +2,7 @@ package me.coley.recaf.ui.controls.pane;
 
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
+import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
@@ -11,11 +12,14 @@ import me.coley.recaf.control.gui.GuiController;
 import me.coley.recaf.ui.controls.ActionButton;
 import me.coley.recaf.ui.controls.ExceptionAlert;
 import me.coley.recaf.util.Log;
+import me.coley.recaf.util.UiUtil;
 import me.coley.recaf.util.self.SelfUpdater;
 import org.commonmark.node.*;
 import org.commonmark.parser.Parser;
 
 import java.io.IOException;
+import java.net.URL;
+import java.util.function.Consumer;
 
 import static me.coley.recaf.util.LangUtil.translate;
 
@@ -37,6 +41,7 @@ public class UpdatePane extends BorderPane {
 		GridPane grid = new GridPane();
 		GridPane.setFillHeight(btn, true);
 		GridPane.setFillWidth(btn, true);
+		grid.setMaxWidth(800);
 		grid.setPadding(new Insets(10));
 		grid.setVgap(10);
 		grid.setHgap(10);
@@ -59,34 +64,93 @@ public class UpdatePane extends BorderPane {
 	private BorderPane getNotes() {
 		TextFlow flow = new TextFlow();
 		Parser parser = Parser.builder().build();
-		Node document = parser.parse(SelfUpdater.getLatestPatchnotes().replaceAll("\\(\\[.+\\)\\)", ""));
+		Node document = parser.parse(SelfUpdater.getLatestPatchnotes());
 		document.accept(new AbstractVisitor() {
 			@Override
-			public void visit(Text text) {
-				Node parent = getRoot(text);
-				if (parent instanceof Heading) {
-					// Skip the version H1 text
-					if (((Heading) parent).getLevel() == 1)
-						return;
-					//
-					addLine(text.getLiteral(), "h2");
-				} else if (parent instanceof BulletList || parent instanceof OrderedList) {
-					String msg = text.getLiteral();
-					addLine(" ● " + msg, null);
+			public void visit(Paragraph paragraph) {
+				// Add all content to same line
+				parse(paragraph, this::text, this::link);
+				newLine();
+			}
+
+			@Override
+			public void visit(Heading heading) {
+				// Skip the version H2 text
+				if (heading.getLevel() <= 2)
+					return;
+				// Extract heading text
+				StringBuilder sb = new StringBuilder();
+				parse(heading, text -> sb.append(text.getLiteral()), null);
+				// Render
+				addText(sb.toString(), "h2");
+				newLine();
+			}
+
+			@Override
+			public void visit(BulletList list) {
+				Node item = list.getFirstChild();
+				do {
+					// Prefix with bullet point
+					addText(" ● ", null);
+					// Add all content to same line
+					parse(item, this::text, this::link);
+					// New line between items
+					newLine();
+					item = item.getNext();
+				} while (item != null);
+			}
+
+			private void text(Text text) {
+				addText(text.getLiteral(), null);
+			}
+
+			private void link(Link link) {
+				String text = link.getTitle();
+				if (text == null) {
+					StringBuilder sb = new StringBuilder();
+					parse(link, t -> sb.append(t.getLiteral()), null);
+					text = sb.toString();
+				}
+				addLink(text, link.getDestination());
+			}
+
+			private void parse(Node node, Consumer<Text> textHandler, Consumer<Link> linkHandler) {
+				if (node instanceof Text) {
+					if (textHandler != null) textHandler.accept((Text) node);
+				} else if (linkHandler != null && node instanceof Link) {
+					linkHandler.accept((Link) node);
+				} else {
+					Node child = node.getFirstChild();
+					do {
+						parse(child, textHandler, linkHandler);
+						child = child.getNext();
+					} while (child != null);
 				}
 			}
 
-			private void addLine(String text, String style) {
-				javafx.scene.text.Text t = new javafx.scene.text.Text(text + "\n");
+			private void addLink(String text, String url) {
+				Hyperlink link = new Hyperlink(text);
+				link.getStyleClass().add("a");
+				link.setOnAction(e -> {
+					try {
+						UiUtil.showDocument(new URL(url).toURI());
+					} catch (Exception ex) {
+						Log.error("Could not open URL: " + url);
+					}
+				});
+				flow.getChildren().add(link);
+			}
+
+			private void addText(String text, String style) {
+				javafx.scene.text.Text t = new javafx.scene.text.Text(text);
 				if (style != null)
 					t.getStyleClass().add(style);
 				flow.getChildren().add(t);
 			}
 
-			private Node getRoot(Node node) {
-				while(!(node.getParent() instanceof Document))
-					node = node.getParent();
-				return node;
+			private void newLine() {
+				javafx.scene.text.Text t = new javafx.scene.text.Text("\n");
+				flow.getChildren().add(t);
 			}
 		});
 		BorderPane pane = new BorderPane(flow);
@@ -120,7 +184,7 @@ public class UpdatePane extends BorderPane {
 		try {
 			SelfUpdater.updateRecaf();
 			controller.exit();
-		} catch(IOException ex) {
+		} catch (IOException ex) {
 			Log.error(ex, "Failed to start update process");
 			ExceptionAlert.show(ex, "Recaf failed to start the update process");
 		}

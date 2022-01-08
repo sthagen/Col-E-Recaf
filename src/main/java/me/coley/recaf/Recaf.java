@@ -31,7 +31,7 @@ import static me.coley.recaf.util.Log.*;
  * @author Matt
  */
 public class Recaf {
-	public static final String VERSION = "2.21.10";
+	public static final String VERSION = "2.21.11";
 	public static final String DOC_URL = "https://col-e.github.io/Recaf-documentation/";
 	public static final int ASM_VERSION = Opcodes.ASM9;
 	private static Controller currentController;
@@ -60,6 +60,7 @@ public class Recaf {
 		}
 
 		init();
+		VMUtil.patchInstrumentation(inst);
 		// Log that we are an agent
 		info("Starting as agent...");
 		// Add instrument launch arg

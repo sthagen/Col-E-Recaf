@@ -2,6 +2,7 @@ package me.coley.recaf.util;
 
 import com.sun.javafx.application.PlatformImpl;
 
+import java.lang.instrument.Instrumentation;
 import java.lang.reflect.Modifier;
 import java.util.HashSet;
 import javafx.application.Platform;
@@ -15,6 +16,7 @@ import java.net.URLClassLoader;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
+import java.util.zip.ZipOutputStream;
 
 /**
  * Dependent and non-dependent platform utilities for VM.
@@ -291,6 +293,61 @@ public final class VMUtil {
                     "Expected to patch two fields, but patched: " + c);
         } catch (IllegalAccessException ex) {
             throw new RuntimeException("Unable to patch reflection filters", ex);
+        }
+    }
+
+    /**
+     * Attempts to make an {@link Instrumentation} capable
+     * of transforming/redefining classes.
+     *
+     * @param instrumentation
+     *      Instrumentation to patch.
+     */
+    public static void patchInstrumentation(Instrumentation instrumentation) {
+        try {
+            Class<?> klass = instrumentation.getClass();
+            Field field = klass.getDeclaredField("mEnvironmentSupportsRedefineClasses");
+            field.setAccessible(true);
+            field.setBoolean(instrumentation, true);
+            (field = klass.getDeclaredField("mEnvironmentSupportsRetransformClassesKnown")).setAccessible(true);
+            field.setBoolean(instrumentation, true);
+            (field = klass.getDeclaredField("mEnvironmentSupportsRetransformClasses")).setAccessible(true);
+            field.setBoolean(instrumentation, true);
+        } catch (NoSuchFieldException | IllegalAccessException ex) {
+            Log.error("Could not patch instrumentation instance:", ex);
+        }
+    }
+
+    /**
+     * Attempts to patch {@link ZipOutputStream} to prevent
+     * some tools from exploiting ZIP writing
+     * mechanism.
+     *
+     * @param zip
+     *      Stream to patch.
+     */
+    public static void patchZipOutput(ZipOutputStream zip) {
+        try {
+            Field field = ZipOutputStream.class.getDeclaredField("names");
+            field.setAccessible(true);
+            field.set(zip, new DiscardingSet());
+        } catch (NoSuchFieldException | IllegalAccessException ex) {
+            Log.error(ex, "Could not replace ZIP names");
+        }
+    }
+
+    /**
+     * A set that discards it's elements upon adding.
+     * This class is used to prevent "Duplicate zip entry: "
+     * error
+     *
+     * @author xDark
+     */
+    private static final class DiscardingSet extends HashSet<String> {
+
+        @Override
+        public boolean add(String s) {
+            return true;
         }
     }
 }
