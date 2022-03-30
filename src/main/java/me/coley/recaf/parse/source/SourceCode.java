@@ -171,7 +171,7 @@ public class SourceCode {
 		// We won't instantly return null because the root range may be SMALLER than
 		// the range of children. This is really stupid IMO but thats how JavaParser is...
 		boolean bounds = true;
-		Position cursor = Position.pos(line, column);
+		Position cursor = new Position(line, column);
 		if (cursor.isBefore(root.getBegin().get()) || cursor.isAfter(root.getEnd().get()))
 			bounds = false;
 		// Iterate over children, return non-null child
